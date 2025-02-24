@@ -28,14 +28,21 @@ def process_document(file_path):
         """
         Extract the role from the file path
         """
-        print(file_path.stem)
-        return file_path.stem.split('-')[0]
+        try:
+            return file_path.stem.split('-')[0]
+        except Exception as e:
+            print(e)
+            raise ValueError(f"Could not extract role from {file_path.stem}")
     
     def extract_company(file_path):
         """
         Extract the company from the file path
         """
-        return file_path.stem.split('-')[1].rstrip('.docx')
+        try:
+            return file_path.stem.split('-')[1]
+        except Exception as e:
+            print(e)
+            raise ValueError(f"Could not extract company from {file_path.stem}")
 
     role = extract_role(file_path)
     company = extract_company(file_path)
@@ -101,32 +108,26 @@ def setup_qa_chain(vectorstore):
 
 def initialize_qa_chain():
     """
-    Initialize the QA chain with progress tracking
+    Initialize the QA chain
     """
     try:
-        with st.progress(0) as progress_bar:
-            st.info("Loading documents...")
-            documents = load_documents()
-            progress_bar.progress(20)
-            
-            st.info("Splitting documents...")
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
-            chunks = text_splitter.split_documents(documents)
-            progress_bar.progress(40)
-            
-            st.info("Initializing HuggingFace Embeddings...")
-            embeddings = initialize_embeddings()
-            progress_bar.progress(60)
-            
-            st.info("Creating vector store...")
-            vectorstore = create_vectorstore(chunks, embeddings)
-            progress_bar.progress(80)
+        st.info("Loading documents...")
+        documents = load_documents()
+        
+        st.info("Splitting documents...")
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
+        chunks = text_splitter.split_documents(documents)
+        
+        st.info("Initializing HuggingFace Embeddings...")
+        embeddings = initialize_embeddings()
+        
+        st.info("Creating vector store...")
+        vectorstore = create_vectorstore(chunks, embeddings)
 
-            st.info("Setting up QA chain...")
-            qa_chain = setup_qa_chain(vectorstore)
-            progress_bar.progress(100)
+        st.info("Setting up QA chain...")
+        qa_chain = setup_qa_chain(vectorstore)
             
-            return qa_chain
+        return qa_chain
     except Exception as e:
         st.error(f"Error initializing the system: {e}")
         return None
@@ -151,42 +152,13 @@ def analyze_job_requirements():
             st.write(doc.page_content)
             st.write("---")
 
-def compare_resume_to_job():
-    """
-    Compare selected resume with selected job description
-    """
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        selected_job = st.selectbox(
-            "Select Job Description", 
-            [f.name for f in Path('./descriptions').glob('*.docx')]
-        )
-    
-    with col2:
-        selected_resume = st.selectbox(
-            "Select Resume", 
-            [f.name for f in Path('./resumes').glob('*.docx')]
-        )
-    
-    if st.button("Compare"):
-        question = f"""Compare the resume {selected_resume} with the job description {selected_job} and identify:
-        1. Matching skills and qualifications
-        2. Missing requirements
-        3. Suggested improvements for the resume to better match this role
-        4. Overall match percentage"""
-        
-        with st.spinner("Analyzing..."):
-            result = st.session_state.qa_chain.invoke({"query": question})
-            st.write(result["result"])
-
 def generate_stats():
     """
     Generate statistics about the job search
     """
     stats_questions = [
         "How many unique companies am I applying to?",
-        "What are the most common job titles I'm applying for?",
+        "What are the most common roles I'm applying for?",
         "What is the distribution of seniority levels in the jobs?",
         "What are the most common technical skills mentioned across all documents?"
     ]
@@ -200,17 +172,37 @@ def generate_stats():
 
 def add_analysis_features():
     """
-    Add analysis feature buttons to sidebar
+    Add analysis feature buttons to sidebar and handle the display logic
     """
     st.sidebar.header("Analysis Tools")
     
-    if st.sidebar.button("📊 Analyze Job Requirements"):
+    # Use radio buttons instead of individual buttons
+    analysis_choice = st.sidebar.radio(
+        "Select Analysis Tool",
+        ["None", "Job Requirements Analysis", "Resume Comparison", "Application Stats"]
+    )
+    
+    if analysis_choice == "Job Requirements Analysis":
         analyze_job_requirements()
-    
-    if st.sidebar.button("🔍 Compare Resume to Job"):
-        compare_resume_to_job()
-    
-    if st.sidebar.button("📈 Generate Application Stats"):
+    elif analysis_choice == "Resume Comparison":
+        st.subheader("Resume Comparison Tool")
+        job_descriptions = [f.name for f in Path('./descriptions').glob('*.docx')]
+        resumes = [f.name for f in Path('./resumes').glob('*.docx')]
+        
+        selected_job = st.selectbox("Select Job Description", job_descriptions)
+        selected_resume = st.selectbox("Select Resume", resumes)
+        
+        if st.button("Compare Documents"):
+            question = f"""Compare the resume {selected_resume} with the job description {selected_job} and identify:
+            1. Matching skills and qualifications
+            2. Missing requirements
+            3. Suggested improvements for the resume to better match this role
+            4. Overall match percentage"""
+            
+            with st.spinner("Analyzing..."):
+                result = st.session_state.qa_chain.invoke({"query": question})
+                st.write(result["result"])
+    elif analysis_choice == "Application Stats":
         generate_stats()
 
 
