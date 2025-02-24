@@ -4,3 +4,4 @@ langchain_huggingface
 langchain_anthropic
 streamlit
 docx2txt
+chromadb
