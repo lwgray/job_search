@@ -5,3 +5,4 @@ langchain_anthropic
 streamlit
 docx2txt
 chromadb
+sqlite>=3.35.0
