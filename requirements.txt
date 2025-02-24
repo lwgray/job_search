@@ -3,4 +3,4 @@ langchain_community
 langchain_huggingface
 langchain_anthropic
 streamlit
-doc2txt
+docx2txt
