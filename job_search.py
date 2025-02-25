@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ['CHROMADB_FORCE_DISABLE_SQLITE_VERSION_CHECK'] = 'true'
 
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -50,7 +51,23 @@ def process_document(file_path):
     try:
         loader = Docx2txtLoader(str(file_path))
         docs = loader.load()
+
+         # If we got an empty document or very short content, print warning
+        if not docs or (docs and len(docs[0].page_content.strip()) < 50):
+            print(f"Warning: {file_path} yielded little or no content")
+        
         for doc in docs:
+            # Ensure we have meaninngful content
+            if len(doc.page_content.strip()) < 10:
+                continue
+            
+            doc.page_content = doc.page_content.replace('\u0000', '') # remove null characters
+            doc.page_content = '\n'.join([line for line in doc.page_content.split('\n') if line.strip()]) # Remove empty lines
+
+            # Add role and company to the top of the document
+            header = f"Role: {role}\nCompany: {company}\n\n"
+            doc.page_content = header + doc.page_content
+
             doc.metadata = {
                 'source': str(file_path),
                 'category': category,
@@ -94,7 +111,16 @@ def setup_qa_chain(vectorstore):
     """
     Set up the QA chain with the retriever and LLM
     """
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    retriever = vectorstore.as_retriever(
+        search_type='mmr',
+        search_kwargs={
+            "k": 5,
+            "fetch_k": 20,
+            "lambda_mult": 0.7,
+            "filter": None
+            }
+        )
+    
     llm = ChatAnthropic(model="claude-3-5-sonnet-20241022",
                         temperature=0,
                         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -115,7 +141,12 @@ def initialize_qa_chain():
         documents = load_documents()
         
         st.info("Splitting documents...")
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=400,
+            separators=["\n\n", '\n', ". ", " ", "", ".  "],
+            length_function=len,
+        )
         chunks = text_splitter.split_documents(documents)
         
         st.info("Initializing HuggingFace Embeddings...")
