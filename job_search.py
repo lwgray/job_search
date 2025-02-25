@@ -1,4 +1,5 @@
 import os
+import shutil
 import streamlit as st
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ['CHROMADB_FORCE_DISABLE_SQLITE_VERSION_CHECK'] = 'true'
@@ -104,6 +105,9 @@ def create_vectorstore(chunks, embeddings):
     """
     Create a vector store from the chunks
     """
+    if os.path.exists('.db'):
+        shutil.rmtree('.db')
+        print("Deleted existing database")
     return Chroma.from_documents(chunks, embeddings,
                                  persist_directory='.db')
 
@@ -111,11 +115,13 @@ def setup_qa_chain(vectorstore):
     """
     Set up the QA chain with the retriever and LLM
     """
+    k_value = len(list(Path('./descriptions').glob('*.docx')))
+
     retriever = vectorstore.as_retriever(
         search_type='mmr',
         search_kwargs={
-            "k": 5,
-            "fetch_k": 20,
+            "k": k_value,
+            "fetch_k": k_value * 3,
             "lambda_mult": 0.7,
             "filter": None
             }
