@@ -71,7 +71,7 @@ def process_document(file_path):
             doc.metadata = {
                 'source': str(file_path),
                 'category': category,
-                'role': role,
+                'role': role,                               
                 'company': company,
                 'filename': file_path.name
             }
@@ -254,6 +254,22 @@ def main():
     
     # Main query interface
     st.header("Ask Questions")
+
+    # Add document type filter
+    doc_type = st.selectbox(
+        "Filter by document type:",
+        ["All Documents", "Cover Letters", "Resumes", "Job Descriptions"]
+    )
+
+    metadata_filter = None
+    if doc_type != "All Documents":
+        category_map = {
+            "Resumes": "resume",    
+            "Cover Letters": "cover_letter",
+            "Job Descriptions": "job_description"
+        }
+        metadata_filter = {"category": category_map[doc_type]}
+
     user_question = st.text_input(
         "Enter your question:",
         "What are the most common skills mentioned across all job descriptions?"
@@ -262,7 +278,18 @@ def main():
     if st.button("Ask"):
         with st.spinner("Analyzing..."):
             try:
-                result = st.session_state.qa_chain.invoke({"query": user_question})
+                if metadata_filter:
+                    retriever = st.session_state.qa_chain.retriever
+                    filtered_docs = retriever.get_relevant_documents(
+                        user_question,
+                        filter=metadata_filter
+                    )
+                    result = st.session_state.qa_chain.invoke({
+                        "query": user_question,
+                        "input_documents": filtered_docs
+                    })
+                else:
+                    result = st.session_state.qa_chain.invoke({"query": user_question})
                 
                 st.subheader("Answer:")
                 st.write(result["result"])
@@ -270,6 +297,10 @@ def main():
                 with st.expander("View Source Documents"):
                     for i, doc in enumerate(result["source_documents"]):
                         st.write(f"Source {i + 1} ({doc.metadata.get('category', 'unknown')}):")
+                        st.write(f"Role: {doc.metadata.get('role', 'unknown')}")
+                        st.write(f"Company: {doc.metadata.get('company', 'unknown')}")
+                        st.write(f"Filename: {doc.metadata.get('filename', 'unknown')}")
+                        st.write("Content:")
                         st.write(doc.page_content)
                         st.write("---")
             except Exception as e:
