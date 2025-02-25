@@ -2,12 +2,11 @@ import os
 import shutil
 import streamlit as st
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ['CHROMADB_FORCE_DISABLE_SQLITE_VERSION_CHECK'] = 'true'
 
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_anthropic import ChatAnthropic
 from pathlib import Path
@@ -105,11 +104,12 @@ def create_vectorstore(chunks, embeddings):
     """
     Create a vector store from the chunks
     """
-    if os.path.exists('.db'):
-        shutil.rmtree('.db')
-        print("Deleted existing database")
-    return Chroma.from_documents(chunks, embeddings,
-                                 persist_directory='.db')
+    if os.path.exists('.faiss_index'):
+        shutil.rmtree('.faiss_index')
+        print("Deleted existing FAISS index")
+    vectorstore = FAISS.from_documents(chunks, embeddings)
+    vectorstore.save_local('.faiss_index')
+    return vectorstore
 
 def setup_qa_chain(vectorstore):
     """
